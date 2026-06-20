@@ -225,7 +225,7 @@ function editorHTML(p){
   const o = overrides[p.n]||{};
   const seg = ['thriving','care','struggling'].map(s =>
     `<button data-s="${s}" class="${p.status===s?'active':''}">${META[s].label}</button>`).join('');
-  const note = o._aiFailed ? `<p class="ainote">AI scan failed: ${o._aiFailed}</p>` : ‘’;
+  const note = o._aiFailed ? `<p class="ainote">AI scan failed: ${o._aiFailed}</p>` : '';
   return `<div class="editor">${note}
       <div class="seg" role="group" aria-label="Condition">${seg}</div>
       <span class="elab">Condition</span><textarea class="f-diag" rows="2">${esc(p.diag)}</textarea>
