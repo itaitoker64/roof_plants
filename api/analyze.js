@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -9,8 +9,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Translate Anthropic-format request body → Gemini format
-    const msg = (req.body.messages || [])[0] || {};
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const msg = (body.messages || [])[0] || {};
+
     const parts = (msg.content || []).map(block => {
       if (block.type === 'image') {
         return { inline_data: { mime_type: block.source.media_type, data: block.source.data } };
@@ -18,32 +19,32 @@ export default async function handler(req, res) {
       return { text: block.text || '' };
     });
 
-    const geminiBody = {
-      contents: [{ parts }],
-      generationConfig: { maxOutputTokens: req.body.max_tokens || 1000 },
-    };
-
     const upstream = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(geminiBody),
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { maxOutputTokens: body.max_tokens || 1000 },
+        }),
       }
     );
 
     const data = await upstream.json();
+
     if (!upstream.ok) {
+      console.error('Gemini error:', JSON.stringify(data));
       return res.status(upstream.status).json(data);
     }
 
-    // Translate Gemini response → Anthropic format so the client code needs no changes
     const text = ((data.candidates || [])[0]?.content?.parts || [])
       .map(p => p.text || '')
       .join('');
 
     return res.status(200).json({ content: [{ type: 'text', text }] });
   } catch (e) {
-    return res.status(502).json({ error: 'Upstream request failed', detail: e.message });
+    console.error('analyze error:', e.message);
+    return res.status(502).json({ error: e.message });
   }
-}
+};
