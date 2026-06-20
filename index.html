@@ -222,7 +222,7 @@ function editorHTML(p){
   const o = overrides[p.n]||{};
   const seg = ['thriving','care','struggling'].map(s =>
     `<button data-s="${s}" class="${p.status===s?'active':''}">${META[s].label}</button>`).join('');
-  const note = o._aiFailed ? `<p class="ainote">Couldn’t auto-check this photo here — set the status and notes yourself.</p>` : '';
+  const note = o._aiFailed ? `<p class="ainote">AI scan failed: ${o._aiFailed}</p>` : ‘’;
   return `<div class="editor">${note}
       <div class="seg" role="group" aria-label="Condition">${seg}</div>
       <span class="elab">Condition</span><textarea class="f-diag" rows="2">${esc(p.diag)}</textarea>
@@ -312,8 +312,8 @@ async function analyze(p, dataUrl){
           {type:"image", source:{type:"base64", media_type:media, data:b64}},
           {type:"text", text:promptFor(p)}]}]})
     });
-    if(!res.ok) throw new Error('HTTP '+res.status);
     const json = await res.json();
+    if(!res.ok) throw new Error('HTTP '+res.status+': '+JSON.stringify(json));
     const text = (json.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
     let t = text.replace(/```json/gi,'').replace(/```/g,'').trim();
     let obj; try{ obj = JSON.parse(t); }catch(e){ const m = t.match(/\{[\s\S]*\}/); if(m) obj = JSON.parse(m[0]); }
@@ -336,7 +336,7 @@ async function handlePhoto(n, file){
     overrides[n] = {...overrides[n], status:r.status, diag:r.diag, action:r.action, updatedAt:Date.now()};
     ui.analyzing[n] = false; render(); saveOverride(n);
   }catch(e){
-    ui.analyzing[n] = false; overrides[n]._aiFailed = true; ui.editing = n; render();
+    ui.analyzing[n] = false; overrides[n]._aiFailed = e.message; ui.editing = n; render();
   }
 }
 
