@@ -143,6 +143,9 @@ footer{padding:34px clamp(18px,5vw,56px) 60px;border-top:1px solid var(--line);c
 </style>
 </head>
 <body>
+<div id="diagBanner" style="background:#fffbe6;border-bottom:2px solid #f0c000;padding:10px 16px;font-family:monospace;font-size:13px;color:#333">
+  Checking… (if this stays, JavaScript is not running)
+</div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="seed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c0-5 0-7 0-9"/><path d="M12 12C12 8 9 5 4 5c0 5 3 8 8 7Z"/><path d="M12 14c0-3.5 2.6-6 7-6 0 4-2.6 6-7 6Z"/></symbol>
   <symbol id="cam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L8 6.2H4.5A1.5 1.5 0 0 0 3 7.7v10.1A1.5 1.5 0 0 0 4.5 19.3h15A1.5 1.5 0 0 0 21 17.8V7.7a1.5 1.5 0 0 0-1.5-1.5H16Z"/><circle cx="12" cy="12.7" r="3.4"/></symbol>
@@ -507,11 +510,18 @@ bulkRoot.addEventListener('click', e=>{
 });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && bulk.open) closeBulk(); });
 
+const diagBanner = document.getElementById('diagBanner');
+diagBanner.textContent = `JS running — PLANTS: ${PLANTS.length}, BASE keys: ${Object.keys(BASE).length}`;
+
 (async function(){
   try {
     await loadOverrides();
     render();
+    diagBanner.style.display = 'none';
   } catch(e) {
+    diagBanner.textContent = `INIT ERROR: ${e.stack||e.message}`;
+    diagBanner.style.background = '#ffeded';
+    diagBanner.style.borderColor = 'red';
     document.getElementById('grid').innerHTML =
       `<div style="padding:2rem;color:red;font-family:monospace;white-space:pre-wrap">INIT ERROR: ${e.stack||e.message}</div>`;
   }
