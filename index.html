@@ -140,6 +140,14 @@ footer{padding:34px clamp(18px,5vw,56px) 60px;border-top:1px solid var(--line);c
 .mbtns .cancelb{background:transparent;border:1px solid var(--line);border-radius:9px;padding:11px 16px;font:500 14px "Spline Sans";cursor:pointer;color:var(--ink)}
 @media (max-width:540px){.grid{grid-template-columns:1fr}.legend{gap:16px}.bsel{max-width:100%}}
 @media (prefers-reduced-motion:reduce){.card,.card.in{opacity:1;transform:none;transition:none}.card:hover{transform:none}.spin{animation:none}.census .seg{transition:none}}
+.photo-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:4;width:28px;height:28px;border-radius:50%;background:rgba(22,49,39,.65);border:none;cursor:pointer;color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;transition:background .15s;padding:0;user-select:none}
+.photo-nav:hover{background:rgba(22,49,39,.95)}
+.photo-nav.prev{left:8px}.photo-nav.next{right:8px}
+.photo-nav[disabled]{opacity:0;pointer-events:none}
+.photo-date{position:absolute;bottom:8px;right:8px;z-index:3;font-family:"Space Mono",monospace;font-size:10px;color:#eef2e6;background:rgba(22,49,39,.65);backdrop-filter:blur(3px);padding:3px 7px;border-radius:5px;pointer-events:none}
+.photo-pager{position:absolute;top:10px;right:10px;z-index:3;font-family:"Space Mono",monospace;font-size:10px;color:#eef2e6;background:rgba(22,49,39,.65);backdrop-filter:blur(3px);padding:3px 7px;border-radius:5px;pointer-events:none}
+.editor input[type=text]{font:400 13.5px "Spline Sans";color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+.editor input[type=text]:focus{outline:2px solid var(--leaf);outline-offset:1px;border-color:var(--leaf)}
 </style>
 </head>
 <body>
@@ -152,6 +160,7 @@ footer{padding:34px clamp(18px,5vw,56px) 60px;border-top:1px solid var(--line);c
   <symbol id="pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
   <symbol id="undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8v6h6"/><path d="M3.5 14a9 9 0 1 0 2.4-9.3L3 8"/></symbol>
   <symbol id="layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
 </svg>
 
 <header class="topbar">
@@ -161,13 +170,14 @@ footer{padding:34px clamp(18px,5vw,56px) 60px;border-top:1px solid var(--line);c
     <button class="chip" data-f="thriving" aria-pressed="false">Thriving</button>
     <button class="chip" data-f="care" aria-pressed="false">Needs care</button>
     <button class="chip" data-f="struggling" aria-pressed="false">Struggling</button>
+    <button class="chip primary" id="newPlantBtn"><svg><use href="#plus"/></svg>New plant</button>
     <button class="chip primary" id="bulkBtn"><svg><use href="#layers"/></svg>Bulk update</button>
     <button class="chip reset" id="resetBtn"><svg><use href="#undo"/></svg>Reset</button>
   </div>
 </header>
 
 <section class="hero">
-  <p class="eyebrow">Rooftop terrace · 17 specimens</p>
+  <p class="eyebrow" id="eyebrow">Rooftop terrace · 17 specimens</p>
   <h1>Every plant on the roof, <em>logged.</em></h1>
   <p class="lede">What each one is, how it’s doing, and the single most useful thing to do next — and you can refresh any plant just by uploading a new photo.</p>
   <div class="census" id="census"></div>
@@ -184,15 +194,17 @@ footer{padding:34px clamp(18px,5vw,56px) 60px;border-top:1px solid var(--line);c
 
 <input type="file" id="fileInput" accept="image/*" hidden>
 <input type="file" id="bulkInput" accept="image/*" multiple hidden>
+<input type="file" id="newPlantInput" accept="image/*" hidden>
 <div id="bulkRoot"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 let PLANTS = [], BASE = {};
+let origPlantCount = 0;
 
 const META = {thriving:{label:"Thriving"}, care:{label:"Needs care"}, struggling:{label:"Struggling"}};
 const overrides = {};
-const ui = {filter:'all', editing:null, analyzing:{}};
+const ui = {filter:'all', editing:null, analyzing:{}, photoIdx:{}};
 let firstRender = true, pendingN = null;
 
 const grid = document.getElementById('grid');
@@ -212,6 +224,7 @@ function ago(ts){
   return new Date(ts).toLocaleDateString();
 }
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function fmtDate(ts){ return ts ? new Date(ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'}) : ''; }
 
 function viewHTML(p){
   return `<p class="diag">${esc(p.diag)}</p>
@@ -226,7 +239,8 @@ function editorHTML(p){
   const seg = ['thriving','care','struggling'].map(s =>
     `<button data-s="${s}" class="${p.status===s?'active':''}">${META[s].label}</button>`).join('');
   const note = o._aiFailed ? `<p class="ainote">AI scan failed: ${o._aiFailed}</p>` : '';
-  return `<div class="editor">${note}
+  const nameFields = o._new ? `<span class="elab">Common name</span><input type="text" class="f-common" value="${esc(p.common)}" placeholder="e.g. Basil"><span class="elab">Scientific name</span><input type="text" class="f-bot" value="${esc(p.bot)}" placeholder="e.g. Ocimum basilicum">` : '';
+  return `<div class="editor">${note}${nameFields}
       <div class="seg" role="group" aria-label="Condition">${seg}</div>
       <span class="elab">Condition</span><textarea class="f-diag" rows="2">${esc(p.diag)}</textarea>
       <span class="elab">Do next</span><textarea class="f-action" rows="2">${esc(p.action)}</textarea>
@@ -239,8 +253,18 @@ function cardHTML(p){
   const o = overrides[p.n];
   const upd = (o && o.updatedAt) ? `<span class="upd mono">Updated ${ago(o.updatedAt)}</span>` : '';
   const analyzing = an ? `<div class="analyzing"><span class="spin"></span>Reading the leaves…</div>` : '';
+  const photos = (o && o.photos) || [];
+  const hasPhotos = photos.length > 0;
+  const hasNav = photos.length > 1;
+  const idx = hasPhotos ? (ui.photoIdx[p.n] ?? photos.length - 1) : -1;
+  const curPhoto = idx >= 0 ? photos[idx] : null;
+  const imgSrc = curPhoto ? curPhoto.img : p.img;
+  const dateTag = curPhoto ? `<span class="photo-date">${fmtDate(curPhoto.uploadedAt)}</span>` : '';
+  const pager = hasNav ? `<span class="photo-pager">${idx + 1}/${photos.length}</span>` : '';
+  const prevBtn = hasNav ? `<button class="photo-nav prev" data-act="prev-photo" data-n="${p.n}"${idx <= 0 ? ' disabled' : ''}>&#8249;</button>` : '';
+  const nextBtn = hasNav ? `<button class="photo-nav next" data-act="next-photo" data-n="${p.n}"${idx >= photos.length - 1 ? ' disabled' : ''}>&#8250;</button>` : '';
   return `<article class="card" style="--i:${p.n}">
-    <div class="photo"><span class="acc">No. ${String(p.n).padStart(2,'0')}</span><img src="${p.img}" alt="${esc(p.common)}" loading="lazy" decoding="async">${analyzing}</div>
+    <div class="photo"><span class="acc">No. ${String(p.n).padStart(2,'0')}</span>${prevBtn}<img src="${imgSrc}" alt="${esc(p.common)}" loading="lazy" decoding="async">${nextBtn}${dateTag}${pager}${analyzing}</div>
     <div class="body">
       <div class="rowtop"><span class="status ${p.status}"><span class="d"></span>${META[p.status].label}</span>${upd}</div>
       <h3 class="name">${esc(p.common)}</h3>
@@ -250,6 +274,8 @@ function cardHTML(p){
 }
 
 function render(){
+  const eyebrow = document.getElementById('eyebrow');
+  if(eyebrow) eyebrow.textContent = `Rooftop terrace · ${PLANTS.length} specimen${PLANTS.length===1?'':'s'}`;
   const list = ui.filter==='all' ? allMerged() : allMerged().filter(p=>p.status===ui.filter);
   grid.innerHTML = list.map(cardHTML).join('');
   empty.style.display = list.length ? 'none' : 'block';
@@ -331,8 +357,12 @@ async function handlePhoto(n, file){
   let dataUrl;
   try{ dataUrl = await compress(file); }
   catch(e){ return; }
-  overrides[n] = {...merged(n), img:dataUrl, updatedAt:Date.now()};
+  const uploadedAt = Date.now();
+  const prevPhotos = (overrides[n] && overrides[n].photos) || [];
+  const photos = [...prevPhotos, {img:dataUrl, uploadedAt}];
+  overrides[n] = {...merged(n), img:dataUrl, updatedAt:uploadedAt, photos};
   delete overrides[n]._aiFailed;
+  ui.photoIdx[n] = photos.length - 1;
   ui.analyzing[n] = true; ui.editing = null; render(); saveOverride(n);
   try{
     const r = await analyze(merged(n), dataUrl);
@@ -359,7 +389,11 @@ async function saveOverride(n){
 }
 async function resetAll(){
   if(window.storage){ try{ const r = await window.storage.list('plant:'); if(r && r.keys) for(const k of r.keys){ try{await window.storage.delete(k);}catch(e){} } }catch(e){} }
+  try{ localStorage.removeItem('extraPlants'); }catch(e){}
   for(const k in overrides) delete overrides[k];
+  for(const k in ui.photoIdx) delete ui.photoIdx[k];
+  PLANTS = PLANTS.filter(p => p.n <= origPlantCount);
+  for(const k in BASE){ if(parseInt(k) > origPlantCount) delete BASE[k]; }
   ui.editing = null; render();
 }
 
@@ -373,17 +407,41 @@ grid.addEventListener('click', e=>{
   if(seg){ seg.parentNode.querySelectorAll('[data-s]').forEach(b=>b.classList.remove('active')); seg.classList.add('active'); return; }
   const btn = e.target.closest('[data-act]'); if(!btn) return;
   const n = +btn.dataset.n, act = btn.dataset.act;
-  if(act==='photo'){ pendingN = n; fileInput.click(); }
+  if(act==='prev-photo'){
+    const photos=(overrides[n]&&overrides[n].photos)||[];
+    if(photos.length>1){ui.photoIdx[n]=Math.max(0,(ui.photoIdx[n]??photos.length-1)-1);render();}
+  }
+  else if(act==='next-photo'){
+    const photos=(overrides[n]&&overrides[n].photos)||[];
+    if(photos.length>1){ui.photoIdx[n]=Math.min(photos.length-1,(ui.photoIdx[n]??photos.length-1)+1);render();}
+  }
+  else if(act==='photo'){ pendingN = n; fileInput.click(); }
   else if(act==='edit'){ ui.editing = n; render(); }
-  else if(act==='cancel'){ if(overrides[n]) delete overrides[n]._aiFailed; ui.editing = null; render(); }
+  else if(act==='cancel'){
+    if(overrides[n] && overrides[n]._new){
+      PLANTS = PLANTS.filter(p=>p.n!==n);
+      delete BASE[n]; delete overrides[n]; delete ui.photoIdx[n];
+      ui.editing = null; render(); return;
+    }
+    if(overrides[n]) delete overrides[n]._aiFailed; ui.editing = null; render();
+  }
   else if(act==='save'){
     const card = btn.closest('.card');
     const sel = card.querySelector('.seg [data-s].active');
     const st = sel ? sel.dataset.s : merged(n).status;
     const diag = card.querySelector('.f-diag').value.trim();
     const action = card.querySelector('.f-action').value.trim();
-    overrides[n] = {...merged(n), status:st, diag:diag||merged(n).diag, action:action||merged(n).action, updatedAt:Date.now()};
-    delete overrides[n]._aiFailed; ui.editing = null; render(); saveOverride(n);
+    const patch = {status:st, diag:diag||merged(n).diag, action:action||merged(n).action, updatedAt:Date.now()};
+    const commonEl = card.querySelector('.f-common');
+    const botEl = card.querySelector('.f-bot');
+    if(commonEl) patch.common = commonEl.value.trim() || merged(n).common;
+    if(botEl) patch.bot = botEl.value.trim() || merged(n).bot;
+    overrides[n] = {...merged(n), ...patch};
+    if(commonEl) BASE[n] = {...BASE[n], common:overrides[n].common, bot:overrides[n].bot};
+    const isNew = !!(overrides[n]._new);
+    delete overrides[n]._aiFailed; delete overrides[n]._new;
+    ui.editing = null; render(); saveOverride(n);
+    if(isNew){ const m=merged(n); saveLocalPlant({n:m.n,common:m.common,bot:m.bot,img:m.img,status:m.status,diag:m.diag,action:m.action}); }
   }
 });
 document.querySelectorAll('.chip[data-f]').forEach(btn=>btn.addEventListener('click', ()=>{
@@ -510,10 +568,76 @@ bulkRoot.addEventListener('click', e=>{
 });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape' && bulk.open) closeBulk(); });
 
+// ===== new plant =====
+function newPlantPrompt(){
+  return 'You are a houseplant expert. Identify the plant in this photo and assess its health.\nReply with ONLY a JSON object, no markdown:\n{"common":"common name","bot":"Genus species","status":"thriving|care|struggling","condition":"one sentence under 24 words","action":"one sentence next step under 24 words"}';
+}
+async function identifyNewPlant(dataUrl){
+  const media = dataUrl.substring(5, dataUrl.indexOf(';'));
+  const b64 = dataUrl.substring(dataUrl.indexOf(',')+1);
+  const ctrl = new AbortController(); const to = setTimeout(()=>ctrl.abort(), 35000);
+  try{
+    const res = await fetch('/api/analyze', {method:'POST', signal:ctrl.signal, headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({model:'claude-haiku-4-5-20251001', max_tokens:500, messages:[{role:'user', content:[
+        {type:'image', source:{type:'base64', media_type:media, data:b64}},
+        {type:'text', text:newPlantPrompt()}]}]})});
+    const json = await res.json();
+    if(!res.ok) throw new Error('HTTP '+res.status+': '+JSON.stringify(json).slice(0,200));
+    const text = (json.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
+    let t = text.replace(/```json/gi,'').replace(/```/g,'').trim();
+    let obj; try{ obj=JSON.parse(t); }catch(e){ const m=t.match(/\{[\s\S]*\}/); if(m) obj=JSON.parse(m[0]); }
+    if(!obj) throw new Error('Could not parse AI response');
+    let st=String(obj.status||'care').toLowerCase(); if(!['thriving','care','struggling'].includes(st)) st='care';
+    return {common:String(obj.common||'Unknown plant').trim(), bot:String(obj.bot||'').trim(),
+      status:st, diag:String(obj.condition||'').trim(), action:String(obj.action||'').trim()};
+  } finally { clearTimeout(to); }
+}
+function loadLocalPlants(){
+  try{ const r=localStorage.getItem('extraPlants'); return r?JSON.parse(r):[]; }catch(e){ return []; }
+}
+function saveLocalPlant(p){
+  try{
+    const arr=loadLocalPlants();
+    const i=arr.findIndex(x=>x.n===p.n);
+    if(i>=0) arr[i]=p; else arr.push(p);
+    localStorage.setItem('extraPlants',JSON.stringify(arr));
+  }catch(e){}
+}
+let newPlantPending=false;
+const newPlantInput=document.getElementById('newPlantInput');
+document.getElementById('newPlantBtn').addEventListener('click',()=>newPlantInput.click());
+newPlantInput.addEventListener('change',async()=>{
+  const f=newPlantInput.files[0]; newPlantInput.value='';
+  if(!f||newPlantPending) return;
+  newPlantPending=true;
+  let dataUrl; try{ dataUrl=await compress(f); }catch(e){ newPlantPending=false; return; }
+  const uploadedAt=Date.now();
+  const n=Math.max(...PLANTS.map(p=>p.n),0)+1;
+  const stub={n,common:'Identifying…',bot:'',status:'care',diag:'',action:'',img:dataUrl};
+  PLANTS.push(stub); BASE[n]=stub;
+  overrides[n]={img:dataUrl,updatedAt:uploadedAt,photos:[{img:dataUrl,uploadedAt}],_new:true};
+  ui.photoIdx[n]=0; ui.analyzing[n]=true; render();
+  showToast('Identifying new plant…');
+  try{
+    const r=await identifyNewPlant(dataUrl);
+    BASE[n]={...stub,common:r.common,bot:r.bot};
+    overrides[n]={...overrides[n],status:r.status,diag:r.diag,action:r.action,updatedAt:Date.now(),_new:true};
+    ui.analyzing[n]=false; ui.editing=n; render();
+    showToast('Plant identified — review and save');
+  }catch(e){
+    ui.analyzing[n]=false; overrides[n]={...overrides[n],_aiFailed:e.message,_new:true};
+    ui.editing=n; render();
+  }
+  newPlantPending=false;
+});
+
 const diagBanner = document.getElementById('diagBanner');
 (async function(){
   try {
     PLANTS = await (await fetch('plants.json')).json();
+    origPlantCount = PLANTS.length;
+    const extra = loadLocalPlants();
+    for(const p of extra) PLANTS.push(p);
     BASE = Object.fromEntries(PLANTS.map(p => [p.n, p]));
     diagBanner.textContent = 'JS running — PLANTS: ' + PLANTS.length + ', BASE keys: ' + Object.keys(BASE).length;
     await loadOverrides();
