@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -148,6 +148,17 @@ footer{padding:34px clamp(18px,5vw,56px) 60px;border-top:1px solid var(--line);c
 .photo-pager{position:absolute;top:10px;right:10px;z-index:3;font-family:"Space Mono",monospace;font-size:10px;color:#eef2e6;background:rgba(22,49,39,.65);backdrop-filter:blur(3px);padding:3px 7px;border-radius:5px;pointer-events:none}
 .editor input[type=text]{font:400 13.5px "Spline Sans";color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
 .editor input[type=text]:focus{outline:2px solid var(--leaf);outline-offset:1px;border-color:var(--leaf)}
+
+/* RTL overrides */
+[dir="rtl"] .acc{left:auto;right:10px}
+[dir="rtl"] .photo-nav.prev{left:auto;right:8px}
+[dir="rtl"] .photo-nav.next{right:auto;left:8px}
+[dir="rtl"] .analyzing{left:auto;right:10px}
+[dir="rtl"] .photo-date{right:auto;left:8px}
+[dir="rtl"] .photo-pager{right:auto;left:10px}
+[dir="rtl"] .toast{left:auto;right:50%;transform:translateX(50%) translateY(20px)}
+[dir="rtl"] .toast.show{transform:translateX(50%) translateY(0)}
+[dir="rtl"] .brand .loc{letter-spacing:0}
 </style>
 </head>
 <body>
@@ -164,7 +175,7 @@ footer{padding:34px clamp(18px,5vw,56px) 60px;border-top:1px solid var(--line);c
 </svg>
 
 <header class="topbar">
-  <div class="brand"><svg class="seed"><use href="#seed"/></svg><div><div>Roof Garden</div><div class="loc">Tel Aviv · Plant Log</div></div></div>
+  <div class="brand"><svg class="seed"><use href="#seed"/></svg><div><div id="brandName">Roof Garden</div><div class="loc">Tel Aviv · Plant Log</div></div></div>
   <div class="controls" role="group" aria-label="Filter and manage">
     <button class="chip" data-f="all" aria-pressed="true">All</button>
     <button class="chip" data-f="thriving" aria-pressed="false">Thriving</button>
@@ -173,13 +184,14 @@ footer{padding:34px clamp(18px,5vw,56px) 60px;border-top:1px solid var(--line);c
     <button class="chip primary" id="newPlantBtn"><svg><use href="#plus"/></svg>New plant</button>
     <button class="chip primary" id="bulkBtn"><svg><use href="#layers"/></svg>Bulk update</button>
     <button class="chip reset" id="resetBtn"><svg><use href="#undo"/></svg>Reset</button>
+    <button class="chip" id="langBtn" title="Switch language">עברית</button>
   </div>
 </header>
 
 <section class="hero">
-  <p class="eyebrow" id="eyebrow">Rooftop terrace · 17 specimens</p>
+  <p class="eyebrow" id="eyebrow">Rooftop terrace · 19 specimens</p>
   <h1>Every plant on the roof, <em>logged.</em></h1>
-  <p class="lede">What each one is, how it’s doing, and the single most useful thing to do next — and you can refresh any plant just by uploading a new photo.</p>
+  <p class="lede">What each one is, how it's doing, and the single most useful thing to do next — and you can refresh any plant just by uploading a new photo.</p>
   <div class="census" id="census"></div>
 </section>
 
@@ -199,10 +211,94 @@ footer{padding:34px clamp(18px,5vw,56px) 60px;border-top:1px solid var(--line);c
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
+// ===== TRANSLATIONS =====
+const STRINGS = {
+  en: {
+    brand:'Roof Garden', loc:'Tel Aviv · Plant Log',
+    filterAll:'All', filterThriving:'Thriving', filterCare:'Needs care', filterStruggling:'Struggling',
+    newPlant:'New plant', bulkUpdate:'Bulk update', reset:'Reset',
+    eyebrow: n=>`Rooftop terrace · ${n} specimen${n===1?'':'s'}`,
+    heroH1:'Every plant on the roof,', heroEm:'logged.',
+    heroLede:"What each one is, how it's doing, and the single most useful thing to do next — and you can refresh any plant just by uploading a new photo.",
+    tipContent:'<b>Update a plant:</b> tap <b>Update photo</b> on any card to swap in a fresh picture. Claude re-checks the plant from the new photo and updates its status and care steps automatically. <b>Edit</b> lets you set things by hand. Or use <b>Bulk update</b> to drop in several photos at once — Claude sorts each into the right plant.',
+    showingAll: n=>`Showing all ${n} plants`,
+    showingFiltered: (n,tot,lbl)=>`Showing ${n} of ${tot} · ${lbl.toLowerCase()}`,
+    emptyMsg:'No plants in this condition right now.',
+    thriving:'Thriving', care:'Needs care', struggling:'Struggling',
+    updated:'Updated', doNext:'Do next', updatePhoto:'Update photo', edit:'Edit',
+    conditionLbl:'Condition', doNextLbl:'Do next', commonName:'Common name', sciName:'Scientific name',
+    save:'Save', cancel:'Cancel',
+    readingLeaves:'Reading the leaves…', rowIdentifying:'Identifying…',
+    justNow:'just now', minAgo: n=>`${n} min ago`, hAgo: n=>`${n} h ago`,
+    bulkTitle:'Bulk update',
+    bulkDesc:"Claude matches each photo to one of your plants and re-checks its health. Reassign any that look off, then apply.",
+    bulkClose:'Close', bulkCancel:'Cancel',
+    bulkApply: n=>`Apply ${n} update${n===1?'':'s'}`,
+    bulkIdentifying: (d,tot)=>`Identifying ${d} / ${tot}…`,
+    bulkReady: n=>`${n} plant${n===1?'':'s'} ready to update`,
+    bulkSkip:'— Skip this photo —',
+    bulkNoAuto:"Couldn't auto-identify here — pick the plant manually; its photo will still update.",
+    dupWarn:'Another photo also targets this plant — the last one wins',
+    highMatch:'high match', medMatch:'medium match', lowMatch:'low match',
+    toastUpdated: n=>`Updated ${n} plant${n>1?'s':''} from your photos`,
+    toastIdentifying:'Identifying new plant…', toastIdentified:'Plant identified — review and save',
+    footerText:'A living log — each new photo is re-assessed by Claude and your changes are saved automatically where supported. When in doubt, check the soil with a finger before watering.',
+    resetConfirm:'Reset all plants to their original photos and statuses?',
+    aiFailed: m=>`AI scan failed: ${m}`,
+    langToggle:'עברית',
+  },
+  he: {
+    brand:'גן גג', loc:'תל אביב · יומן צמחים',
+    filterAll:'הכל', filterThriving:'פורחים', filterCare:'זקוקים לטיפול', filterStruggling:'במצוקה',
+    newPlant:'צמח חדש', bulkUpdate:'עדכון מרוכז', reset:'איפוס',
+    eyebrow: n=>`גג הבית · ${n} צמחים`,
+    heroH1:'כל צמח על הגג,', heroEm:'מתועד.',
+    heroLede:'מה כל צמח, איך הוא מרגיש, ומה הדבר הבא הכי שימושי לעשות — ואפשר לעדכן כל צמח פשוט על ידי העלאת תמונה חדשה.',
+    tipContent:'<b>עדכון צמח:</b> לחץ על <b>עדכן תמונה</b> בכל כרטיס כדי להחליף את התמונה. Claude יבדוק מחדש את הצמח ויעדכן את הסטטוס ושלבי הטיפול אוטומטית. <b>ערוך</b> מאפשר לקבוע ידנית. או השתמש ב<b>עדכון מרוכז</b> לשלוח מספר תמונות בבת אחת.',
+    showingAll: n=>`מציג את כל ${n} הצמחים`,
+    showingFiltered: (n,tot,lbl)=>`מציג ${n} מתוך ${tot} · ${lbl}`,
+    emptyMsg:'אין צמחים במצב זה כרגע.',
+    thriving:'פורח', care:'זקוק לטיפול', struggling:'במצוקה',
+    updated:'עודכן', doNext:'מה לעשות', updatePhoto:'עדכן תמונה', edit:'ערוך',
+    conditionLbl:'מצב', doNextLbl:'מה לעשות', commonName:'שם נפוץ', sciName:'שם מדעי',
+    save:'שמור', cancel:'ביטול',
+    readingLeaves:'מנתח את העלים...', rowIdentifying:'מזהה...',
+    justNow:'לרגע', minAgo: n=>`לפני ${n} דקות`, hAgo: n=>`לפני ${n} שעות`,
+    bulkTitle:'עדכון מרוכז',
+    bulkDesc:'Claude מתאים כל תמונה לאחד מהצמחים שלך ובודק את בריאותו. שנה הקצאות לפי הצורך ואז החל.',
+    bulkClose:'סגור', bulkCancel:'ביטול',
+    bulkApply: n=>`החל ${n} עדכונים`,
+    bulkIdentifying: (d,tot)=>`מזהה ${d} / ${tot}…`,
+    bulkReady: n=>`${n} צמחים מוכנים לעדכון`,
+    bulkSkip:'— דלג על תמונה זו —',
+    bulkNoAuto:'לא ניתן לזהות אוטומטית — בחר צמח ידנית; התמונה תתעדכן בכל מקרה.',
+    dupWarn:'תמונה אחרת כוללת צמח זה — האחרונה גוברת',
+    highMatch:'התאמה גבוהה', medMatch:'התאמה בינונית', lowMatch:'התאמה נמוכה',
+    toastUpdated: n=>`עודכנו ${n} צמחים מהתמונות`,
+    toastIdentifying:'מזהה צמח חדש...', toastIdentified:'צמח זוהה — בדוק ושמור',
+    footerText:'יומן חי — כל תמונה חדשה נבדקת מחדש על ידי Claude והשינויים נשמרים אוטומטית כשנתמך. בספק, בדוק את האדמה עם האצבע לפני השקיה.',
+    resetConfirm:'לאפס את כל הצמחים לתמונות ולסטטוסים המקוריים?',
+    aiFailed: m=>`סריקת AI נכשלה: ${m}`,
+    langToggle:'English',
+  }
+};
+
+let CUR_LANG = (() => { try { return localStorage.getItem('lang') || 'en'; } catch(e){ return 'en'; } })();
+const t = (key, ...args) => {
+  const fn = STRINGS[CUR_LANG]?.[key] ?? STRINGS.en[key];
+  return typeof fn === 'function' ? fn(...args) : (fn ?? key);
+};
+
 let PLANTS = [], BASE = {};
 let origPlantCount = 0;
 
-const META = {thriving:{label:"Thriving"}, care:{label:"Needs care"}, struggling:{label:"Struggling"}};
+const META = {thriving:{label:'Thriving'}, care:{label:'Needs care'}, struggling:{label:'Struggling'}};
+function syncMeta(){
+  META.thriving.label = t('thriving');
+  META.care.label    = t('care');
+  META.struggling.label = t('struggling');
+}
+
 const overrides = {};
 const ui = {filter:'all', editing:null, analyzing:{}, photoIdx:{}};
 let firstRender = true, pendingN = null;
@@ -218,41 +314,42 @@ const allMerged = () => PLANTS.map(p => merged(p.n));
 function ago(ts){
   if(!ts) return '';
   const s = (Date.now()-ts)/1000;
-  if(s<60) return 'just now';
-  if(s<3600) return Math.floor(s/60)+' min ago';
-  if(s<86400) return Math.floor(s/3600)+' h ago';
-  return new Date(ts).toLocaleDateString();
+  const S = STRINGS[CUR_LANG];
+  if(s<60) return S.justNow;
+  if(s<3600) return S.minAgo(Math.floor(s/60));
+  if(s<86400) return S.hAgo(Math.floor(s/3600));
+  return new Date(ts).toLocaleDateString(CUR_LANG==='he'?'he-IL':undefined);
 }
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-function fmtDate(ts){ return ts ? new Date(ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'}) : ''; }
+function fmtDate(ts){ return ts ? new Date(ts).toLocaleDateString(CUR_LANG==='he'?'he-IL':'en-GB',{day:'numeric',month:'short',year:'2-digit'}) : ''; }
 
 function viewHTML(p){
   return `<p class="diag">${esc(p.diag)}</p>
-    <div class="next"><svg class="seed"><use href="#seed"/></svg><div><span class="lab">Do next</span><p>${esc(p.action)}</p></div></div>
+    <div class="next"><svg class="seed"><use href="#seed"/></svg><div><span class="lab">${t('doNext')}</span><p>${esc(p.action)}</p></div></div>
     <div class="tools">
-      <button class="tbtn" data-act="photo" data-n="${p.n}"><svg><use href="#cam"/></svg>Update photo</button>
-      <button class="tbtn" data-act="edit" data-n="${p.n}"><svg><use href="#pen"/></svg>Edit</button>
+      <button class="tbtn" data-act="photo" data-n="${p.n}"><svg><use href="#cam"/></svg>${t('updatePhoto')}</button>
+      <button class="tbtn" data-act="edit" data-n="${p.n}"><svg><use href="#pen"/></svg>${t('edit')}</button>
     </div>`;
 }
 function editorHTML(p){
   const o = overrides[p.n]||{};
   const seg = ['thriving','care','struggling'].map(s =>
-    `<button data-s="${s}" class="${p.status===s?'active':''}">${META[s].label}</button>`).join('');
-  const note = o._aiFailed ? `<p class="ainote">AI scan failed: ${o._aiFailed}</p>` : '';
-  const nameFields = o._new ? `<span class="elab">Common name</span><input type="text" class="f-common" value="${esc(p.common)}" placeholder="e.g. Basil"><span class="elab">Scientific name</span><input type="text" class="f-bot" value="${esc(p.bot)}" placeholder="e.g. Ocimum basilicum">` : '';
+    `<button data-s="${s}" class="${p.status===s?'active':''}">${t(s)}</button>`).join('');
+  const note = o._aiFailed ? `<p class="ainote">${esc(t('aiFailed', o._aiFailed))}</p>` : '';
+  const nameFields = o._new ? `<span class="elab">${t('commonName')}</span><input type="text" class="f-common" value="${esc(p.common)}" placeholder="e.g. Basil"><span class="elab">${t('sciName')}</span><input type="text" class="f-bot" value="${esc(p.bot)}" placeholder="e.g. Ocimum basilicum">` : '';
   return `<div class="editor">${note}${nameFields}
-      <div class="seg" role="group" aria-label="Condition">${seg}</div>
-      <span class="elab">Condition</span><textarea class="f-diag" rows="2">${esc(p.diag)}</textarea>
-      <span class="elab">Do next</span><textarea class="f-action" rows="2">${esc(p.action)}</textarea>
-      <div class="erow"><button class="save" data-act="save" data-n="${p.n}">Save</button><button class="cancel" data-act="cancel" data-n="${p.n}">Cancel</button></div>
+      <div class="seg" role="group" aria-label="${t('conditionLbl')}">${seg}</div>
+      <span class="elab">${t('conditionLbl')}</span><textarea class="f-diag" rows="2">${esc(p.diag)}</textarea>
+      <span class="elab">${t('doNextLbl')}</span><textarea class="f-action" rows="2">${esc(p.action)}</textarea>
+      <div class="erow"><button class="save" data-act="save" data-n="${p.n}">${t('save')}</button><button class="cancel" data-act="cancel" data-n="${p.n}">${t('cancel')}</button></div>
     </div>`;
 }
 function cardHTML(p){
   const an = ui.analyzing[p.n];
   const editing = ui.editing===p.n;
   const o = overrides[p.n];
-  const upd = (o && o.updatedAt) ? `<span class="upd mono">Updated ${ago(o.updatedAt)}</span>` : '';
-  const analyzing = an ? `<div class="analyzing"><span class="spin"></span>Reading the leaves…</div>` : '';
+  const upd = (o && o.updatedAt) ? `<span class="upd mono">${t('updated')} ${ago(o.updatedAt)}</span>` : '';
+  const analyzing = an ? `<div class="analyzing"><span class="spin"></span>${t('readingLeaves')}</div>` : '';
   const photos = (o && o.photos) || [];
   const hasPhotos = photos.length > 0;
   const hasNav = photos.length > 1;
@@ -261,8 +358,9 @@ function cardHTML(p){
   const imgSrc = curPhoto ? curPhoto.img : p.img;
   const dateTag = curPhoto ? `<span class="photo-date">${fmtDate(curPhoto.uploadedAt)}</span>` : '';
   const pager = hasNav ? `<span class="photo-pager">${idx + 1}/${photos.length}</span>` : '';
-  const prevBtn = hasNav ? `<button class="photo-nav prev" data-act="prev-photo" data-n="${p.n}"${idx <= 0 ? ' disabled' : ''}>&#8249;</button>` : '';
-  const nextBtn = hasNav ? `<button class="photo-nav next" data-act="next-photo" data-n="${p.n}"${idx >= photos.length - 1 ? ' disabled' : ''}>&#8250;</button>` : '';
+  const isRTL = CUR_LANG === 'he';
+  const prevBtn = hasNav ? `<button class="photo-nav prev" data-act="prev-photo" data-n="${p.n}"${idx <= 0 ? ' disabled' : ''}>${isRTL ? '&#8250;' : '&#8249;'}</button>` : '';
+  const nextBtn = hasNav ? `<button class="photo-nav next" data-act="next-photo" data-n="${p.n}"${idx >= photos.length - 1 ? ' disabled' : ''}>${isRTL ? '&#8249;' : '&#8250;'}</button>` : '';
   return `<article class="card" style="--i:${p.n}">
     <div class="photo"><span class="acc">No. ${String(p.n).padStart(2,'0')}</span>${prevBtn}<img src="${imgSrc}" alt="${esc(p.common)}" loading="lazy" decoding="async">${nextBtn}${dateTag}${pager}${analyzing}</div>
     <div class="body">
@@ -275,13 +373,13 @@ function cardHTML(p){
 
 function render(){
   const eyebrow = document.getElementById('eyebrow');
-  if(eyebrow) eyebrow.textContent = `Rooftop terrace · ${PLANTS.length} specimen${PLANTS.length===1?'':'s'}`;
+  if(eyebrow) eyebrow.textContent = t('eyebrow', PLANTS.length);
   const list = ui.filter==='all' ? allMerged() : allMerged().filter(p=>p.status===ui.filter);
   grid.innerHTML = list.map(cardHTML).join('');
   empty.style.display = list.length ? 'none' : 'block';
   const total = PLANTS.length;
-  countLine.textContent = ui.filter==='all' ? `Showing all ${total} plants`
-    : `Showing ${list.length} of ${total} · ${META[ui.filter].label.toLowerCase()}`;
+  countLine.textContent = ui.filter==='all' ? t('showingAll', total)
+    : t('showingFiltered', list.length, total, META[ui.filter].label);
   renderCensus();
   if(firstRender){
     firstRender = false;
@@ -296,14 +394,14 @@ function renderCensus(){
   allMerged().forEach(p=>c[p.status]++);
   const total = PLANTS.length, pct = s => (c[s]/total*100).toFixed(2)+'%';
   document.getElementById('census').innerHTML = `
-    <div class="bar" role="img" aria-label="${c.thriving} thriving, ${c.care} need care, ${c.struggling} struggling">
+    <div class="bar" role="img" aria-label="${c.thriving} ${t('thriving')}, ${c.care} ${t('care')}, ${c.struggling} ${t('struggling')}">
       <div class="seg thriving" style="width:${pct('thriving')}"></div>
       <div class="seg care" style="width:${pct('care')}"></div>
       <div class="seg struggling" style="width:${pct('struggling')}"></div></div>
     <div class="legend">
-      <div class="k"><span class="dot" style="background:#62b06f"></span><span class="num">${c.thriving}</span><span class="lab">Thriving</span></div>
-      <div class="k"><span class="dot" style="background:#e0a23f"></span><span class="num">${c.care}</span><span class="lab">Need care</span></div>
-      <div class="k"><span class="dot" style="background:#d36a4d"></span><span class="num">${c.struggling}</span><span class="lab">Struggling</span></div></div>`;
+      <div class="k"><span class="dot" style="background:#62b06f"></span><span class="num">${c.thriving}</span><span class="lab">${t('thriving')}</span></div>
+      <div class="k"><span class="dot" style="background:#e0a23f"></span><span class="num">${c.care}</span><span class="lab">${t('care')}</span></div>
+      <div class="k"><span class="dot" style="background:#d36a4d"></span><span class="num">${c.struggling}</span><span class="lab">${t('struggling')}</span></div></div>`;
 }
 
 // ---- image compression (browser side) ----
@@ -344,8 +442,8 @@ async function analyze(p, dataUrl){
     const json = await res.json();
     if(!res.ok) throw new Error('HTTP '+res.status+': '+JSON.stringify(json));
     const text = (json.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
-    let t = text.replace(/```json/gi,'').replace(/```/g,'').trim();
-    let obj; try{ obj = JSON.parse(t); }catch(e){ const m = t.match(/\{[\s\S]*\}/); if(m) obj = JSON.parse(m[0]); }
+    let tx = text.replace(/```json/gi,'').replace(/```/g,'').trim();
+    let obj; try{ obj = JSON.parse(tx); }catch(e){ const m = tx.match(/\{[\s\S]*\}/); if(m) obj = JSON.parse(m[0]); }
     if(!obj) throw new Error('could not parse');
     let st = String(obj.status||'').toLowerCase();
     if(!['thriving','care','struggling'].includes(st)) st = 'care';
@@ -450,7 +548,7 @@ document.querySelectorAll('.chip[data-f]').forEach(btn=>btn.addEventListener('cl
 }));
 document.getElementById('resetBtn').addEventListener('click', ()=>{
   if(Object.keys(overrides).length===0) return;
-  if(confirm('Reset all plants to their original photos and statuses?')) resetAll();
+  if(confirm(t('resetConfirm'))) resetAll();
 });
 
 // ===== bulk update =====
@@ -477,8 +575,8 @@ async function identify(dataUrl){
     if(!res.ok) throw new Error('HTTP '+res.status);
     const json = await res.json();
     const text = (json.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
-    let t = text.replace(/```json/gi,'').replace(/```/g,'').trim();
-    let obj; try{ obj = JSON.parse(t); }catch(e){ const m = t.match(/\{[\s\S]*\}/); if(m) obj = JSON.parse(m[0]); }
+    let tx = text.replace(/```json/gi,'').replace(/```/g,'').trim();
+    let obj; try{ obj = JSON.parse(tx); }catch(e){ const m = tx.match(/\{[\s\S]*\}/); if(m) obj = JSON.parse(m[0]); }
     if(!obj) throw new Error('parse');
     let st = String(obj.status||'').toLowerCase(); if(!['thriving','care','struggling'].includes(st)) st = 'care';
     let conf = String(obj.confidence||'low').toLowerCase(); if(!['high','medium','low'].includes(conf)) conf = 'low';
@@ -509,10 +607,11 @@ async function startBulk(fileList){
 }
 function bulkCounts(){ const m={}; bulk.items.forEach(it=>{ if(it.chosen) m[it.chosen]=(m[it.chosen]||0)+1; }); return m; }
 function optionList(sel){
-  let o = `<option value="0"${sel===0?' selected':''}>— Skip this photo —</option>`;
+  let o = `<option value="0"${sel===0?' selected':''}>${t('bulkSkip')}</option>`;
   PLANTS.forEach(p=>{ o += `<option value="${p.n}"${sel===p.n?' selected':''}>No. ${String(p.n).padStart(2,'0')} · ${esc(p.common)}</option>`; });
   return o;
 }
+function confLabel(c){ return c==='high'?t('highMatch'):c==='medium'?t('medMatch'):t('lowMatch'); }
 function renderBulk(){
   if(!bulk.open){ bulkRoot.innerHTML=''; return; }
   const dup = bulkCounts();
@@ -523,25 +622,25 @@ function renderBulk(){
     const thumb = it.img ? `<img class="bthumb" src="${it.img}" alt="">` : `<div class="bthumb"></div>`;
     let detail;
     if(it.phase==='identifying'){
-      detail = `<span class="bident"><span class="spin dark"></span>Identifying…</span>`;
+      detail = `<span class="bident"><span class="spin dark"></span>${t('rowIdentifying')}</span>`;
     } else if(it.phase==='error'){
       detail = `<div class="selrow"><select class="bsel" data-id="${it.id}">${optionList(it.chosen)}</select></div>
-        <div class="berr">Couldn’t auto-identify here — pick the plant manually; its photo will still update.</div>`;
+        <div class="berr">${t('bulkNoAuto')}</div>`;
     } else {
-      const dupWarn = (it.chosen>0 && dup[it.chosen]>1) ? `<span class="bwarn">Another photo also targets this plant — the last one wins</span>` : '';
+      const dupWarn = (it.chosen>0 && dup[it.chosen]>1) ? `<span class="bwarn">${t('dupWarn')}</span>` : '';
       const stat = it.chosen>0 ? `<span class="status ${it.status}"><span class="d"></span>${META[it.status].label}</span>` : '';
-      const conf = it.chosen>0 ? `<span class="bconf ${it.confidence}">${it.confidence} match</span>` : '';
+      const conf = it.chosen>0 ? `<span class="bconf ${it.confidence}">${confLabel(it.confidence)}</span>` : '';
       detail = `<div class="selrow"><select class="bsel" data-id="${it.id}">${optionList(it.chosen)}</select>${stat}${conf}</div>
         ${it.chosen>0 ? `<div class="bcond">${esc(it.diag)}</div>` : ''}${dupWarn}`;
     }
     return `<div class="brow">${thumb}<div class="bmeta"><div class="bfname mono">${esc(it.fname)}</div>${detail}</div></div>`;
   }).join('');
   bulkRoot.innerHTML = `<div class="backdrop" id="bulkBackdrop">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Bulk update plants">
-      <div class="mhead"><div><h2>Bulk update</h2><p>Claude matches each photo to one of your plants and re-checks its health. Reassign any that look off, then apply.</p></div><button class="mclose" id="bulkClose" aria-label="Close">×</button></div>
+    <div class="modal" role="dialog" aria-modal="true" aria-label="${t('bulkTitle')}">
+      <div class="mhead"><div><h2>${t('bulkTitle')}</h2><p>${t('bulkDesc')}</p></div><button class="mclose" id="bulkClose" aria-label="${t('bulkClose')}">×</button></div>
       <div class="mbody">${rows}</div>
-      <div class="mfoot"><span class="mprog">${identifying ? `Identifying ${done} / ${bulk.items.length}…` : `${applyN} plant${applyN===1?'':'s'} ready to update`}</span>
-        <div class="mbtns"><button class="cancelb" id="bulkCancel">Cancel</button><button class="apply" id="bulkApply" ${identifying||applyN===0?'disabled':''}>Apply ${applyN} update${applyN===1?'':'s'}</button></div></div>
+      <div class="mfoot"><span class="mprog">${identifying ? t('bulkIdentifying',done,bulk.items.length) : t('bulkReady',applyN)}</span>
+        <div class="mbtns"><button class="cancelb" id="bulkCancel">${t('cancel')}</button><button class="apply" id="bulkApply" ${identifying||applyN===0?'disabled':''}>${t('bulkApply',applyN)}</button></div></div>
     </div></div>`;
 }
 function applyBulk(){
@@ -554,7 +653,7 @@ function applyBulk(){
     delete overrides[n]._aiFailed; saveOverride(n); applied.add(n);
   });
   bulk.open = false; renderBulk(); render();
-  if(applied.size) showToast(`Updated ${applied.size} plant${applied.size>1?'s':''} from your photos`);
+  if(applied.size) showToast(t('toastUpdated', applied.size));
 }
 function closeBulk(){ if(bulk.applying) return; bulk.open = false; renderBulk(); }
 
@@ -584,8 +683,8 @@ async function identifyNewPlant(dataUrl){
     const json = await res.json();
     if(!res.ok) throw new Error('HTTP '+res.status+': '+JSON.stringify(json).slice(0,200));
     const text = (json.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
-    let t = text.replace(/```json/gi,'').replace(/```/g,'').trim();
-    let obj; try{ obj=JSON.parse(t); }catch(e){ const m=t.match(/\{[\s\S]*\}/); if(m) obj=JSON.parse(m[0]); }
+    let tx = text.replace(/```json/gi,'').replace(/```/g,'').trim();
+    let obj; try{ obj=JSON.parse(tx); }catch(e){ const m=tx.match(/\{[\s\S]*\}/); if(m) obj=JSON.parse(m[0]); }
     if(!obj) throw new Error('Could not parse AI response');
     let st=String(obj.status||'care').toLowerCase(); if(!['thriving','care','struggling'].includes(st)) st='care';
     return {common:String(obj.common||'Unknown plant').trim(), bot:String(obj.bot||'').trim(),
@@ -617,18 +716,51 @@ newPlantInput.addEventListener('change',async()=>{
   PLANTS.push(stub); BASE[n]=stub;
   overrides[n]={img:dataUrl,updatedAt:uploadedAt,photos:[{img:dataUrl,uploadedAt}],_new:true};
   ui.photoIdx[n]=0; ui.analyzing[n]=true; render();
-  showToast('Identifying new plant…');
+  showToast(t('toastIdentifying'));
   try{
     const r=await identifyNewPlant(dataUrl);
     BASE[n]={...stub,common:r.common,bot:r.bot};
     overrides[n]={...overrides[n],status:r.status,diag:r.diag,action:r.action,updatedAt:Date.now(),_new:true};
     ui.analyzing[n]=false; ui.editing=n; render();
-    showToast('Plant identified — review and save');
+    showToast(t('toastIdentified'));
   }catch(e){
     ui.analyzing[n]=false; overrides[n]={...overrides[n],_aiFailed:e.message,_new:true};
     ui.editing=n; render();
   }
   newPlantPending=false;
+});
+
+// ===== language toggle =====
+function applyLangDOM(){
+  document.documentElement.setAttribute('dir', CUR_LANG==='he' ? 'rtl' : 'ltr');
+  document.documentElement.lang = CUR_LANG;
+  document.getElementById('brandName').textContent = t('brand');
+  document.querySelector('.brand .loc').textContent = t('loc');
+  document.querySelector('[data-f="all"]').textContent = t('filterAll');
+  document.querySelector('[data-f="thriving"]').textContent = t('filterThriving');
+  document.querySelector('[data-f="care"]').textContent = t('filterCare');
+  document.querySelector('[data-f="struggling"]').textContent = t('filterStruggling');
+  document.getElementById('newPlantBtn').innerHTML = `<svg><use href="#plus"/></svg>${t('newPlant')}`;
+  document.getElementById('bulkBtn').innerHTML = `<svg><use href="#layers"/></svg>${t('bulkUpdate')}`;
+  document.getElementById('resetBtn').innerHTML = `<svg><use href="#undo"/></svg>${t('reset')}`;
+  document.getElementById('langBtn').textContent = t('langToggle');
+  const h1 = document.querySelector('.hero h1');
+  if(h1.firstChild && h1.firstChild.nodeType===3) h1.firstChild.textContent = t('heroH1') + ' ';
+  const em = h1.querySelector('em'); if(em) em.textContent = t('heroEm');
+  document.querySelector('.hero .lede').textContent = t('heroLede');
+  document.querySelector('.tip div').innerHTML = t('tipContent');
+  document.querySelector('footer p').textContent = t('footerText');
+  empty.textContent = t('emptyMsg');
+  syncMeta();
+}
+function setLang(lang){
+  CUR_LANG = lang;
+  try{ localStorage.setItem('lang', lang); }catch(e){}
+  applyLangDOM();
+  render();
+}
+document.getElementById('langBtn').addEventListener('click', ()=>{
+  setLang(CUR_LANG==='en' ? 'he' : 'en');
 });
 
 const diagBanner = document.getElementById('diagBanner');
@@ -641,6 +773,7 @@ const diagBanner = document.getElementById('diagBanner');
     BASE = Object.fromEntries(PLANTS.map(p => [p.n, p]));
     diagBanner.textContent = 'JS running — PLANTS: ' + PLANTS.length + ', BASE keys: ' + Object.keys(BASE).length;
     await loadOverrides();
+    applyLangDOM();
     render();
     diagBanner.style.display = 'none';
   } catch(e) {
