@@ -768,7 +768,7 @@ document.getElementById('langBtn').addEventListener('click', ()=>{
 const diagBanner = document.getElementById('diagBanner');
 (async function(){
   try {
-    PLANTS = await (await fetch('plants.json')).json();
+    PLANTS = await (await fetch('plants.json', {cache:'no-store'})).json();
     origPlantCount = PLANTS.length;
     const extra = loadLocalPlants();
     for(const p of extra) PLANTS.push(p);
