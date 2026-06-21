@@ -324,8 +324,10 @@ const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 function fmtDate(ts){ return ts ? new Date(ts).toLocaleDateString(CUR_LANG==='he'?'he-IL':'en-GB',{day:'numeric',month:'short',year:'2-digit'}) : ''; }
 
 function viewHTML(p){
-  return `<p class="diag">${esc(p.diag)}</p>
-    <div class="next"><svg class="seed"><use href="#seed"/></svg><div><span class="lab">${t('doNext')}</span><p>${esc(p.action)}</p></div></div>
+  const diag   = (CUR_LANG==='he' && p.diag_he)   ? p.diag_he   : p.diag;
+  const action = (CUR_LANG==='he' && p.action_he) ? p.action_he : p.action;
+  return `<p class="diag">${esc(diag)}</p>
+    <div class="next"><svg class="seed"><use href="#seed"/></svg><div><span class="lab">${t('doNext')}</span><p>${esc(action)}</p></div></div>
     <div class="tools">
       <button class="tbtn" data-act="photo" data-n="${p.n}"><svg><use href="#cam"/></svg>${t('updatePhoto')}</button>
       <button class="tbtn" data-act="edit" data-n="${p.n}"><svg><use href="#pen"/></svg>${t('edit')}</button>
@@ -365,7 +367,7 @@ function cardHTML(p){
     <div class="photo"><span class="acc">No. ${String(p.n).padStart(2,'0')}</span>${prevBtn}<img src="${imgSrc}" alt="${esc(p.common)}" loading="lazy" decoding="async">${nextBtn}${dateTag}${pager}${analyzing}</div>
     <div class="body">
       <div class="rowtop"><span class="status ${p.status}"><span class="d"></span>${META[p.status].label}</span>${upd}</div>
-      <h3 class="name">${esc(p.common)}</h3>
+      <h3 class="name">${esc(CUR_LANG==='he' && p.common_he ? p.common_he : p.common)}</h3>
       <p class="bot">${esc(p.bot)}</p>
       ${editing ? editorHTML(p) : viewHTML(p)}
     </div></article>`;
