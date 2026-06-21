@@ -85,6 +85,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:"Spline Sans",sy
 .tbtn:hover{background:var(--pine);color:#eef2e6;border-color:var(--pine)}
 .tbtn svg{width:15px;height:15px}
 .tbtn:focus-visible{outline:2px solid var(--pine);outline-offset:2px}
+.tbtn-remove{color:#a33;border-color:#e8c8c8}
+.tbtn-remove:hover{background:#a33;border-color:#a33;color:#fff}
 
 .editor{display:flex;flex-direction:column;gap:10px;margin-top:4px}
 .seg{display:flex;gap:6px}
@@ -169,6 +171,7 @@ footer{padding:34px clamp(18px,5vw,56px) 60px;border-top:1px solid var(--line);c
   <symbol id="seed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c0-5 0-7 0-9"/><path d="M12 12C12 8 9 5 4 5c0 5 3 8 8 7Z"/><path d="M12 14c0-3.5 2.6-6 7-6 0 4-2.6 6-7 6Z"/></symbol>
   <symbol id="cam" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L8 6.2H4.5A1.5 1.5 0 0 0 3 7.7v10.1A1.5 1.5 0 0 0 4.5 19.3h15A1.5 1.5 0 0 0 21 17.8V7.7a1.5 1.5 0 0 0-1.5-1.5H16Z"/><circle cx="12" cy="12.7" r="3.4"/></symbol>
   <symbol id="pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></symbol>
   <symbol id="undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8v6h6"/><path d="M3.5 14a9 9 0 1 0 2.4-9.3L3 8"/></symbol>
   <symbol id="layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="M3 13l9 5 9-5"/></symbol>
   <symbol id="plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
@@ -245,6 +248,7 @@ const STRINGS = {
     footerText:'A living log — each new photo is re-assessed by Claude and your changes are saved automatically where supported. When in doubt, check the soil with a finger before watering.',
     resetConfirm:'Reset all plants to their original photos and statuses?',
     aiFailed: m=>`AI scan failed: ${m}`,
+    removePlant:'Remove plant', confirmRemove:'Remove this plant from your log?',
     langToggle:'עברית',
   },
   he: {
@@ -279,6 +283,7 @@ const STRINGS = {
     footerText:'יומן חי — כל תמונה חדשה נבדקת מחדש על ידי Claude והשינויים נשמרים אוטומטית כשנתמך. בספק, בדוק את האדמה עם האצבע לפני השקיה.',
     resetConfirm:'לאפס את כל הצמחים לתמונות ולסטטוסים המקוריים?',
     aiFailed: m=>`סריקת AI נכשלה: ${m}`,
+    removePlant:'הסר צמח', confirmRemove:'להסיר צמח זה מהיומן?',
     langToggle:'English',
   }
 };
@@ -300,6 +305,8 @@ function syncMeta(){
 }
 
 const overrides = {};
+let removedPlants = new Set();
+try{ removedPlants = new Set(JSON.parse(localStorage.getItem('removedPlants')||'[]')); }catch(e){}
 const ui = {filter:'all', editing:null, analyzing:{}, photoIdx:{}};
 let firstRender = true, pendingN = null;
 
@@ -331,6 +338,7 @@ function viewHTML(p){
     <div class="tools">
       <button class="tbtn" data-act="photo" data-n="${p.n}"><svg><use href="#cam"/></svg>${t('updatePhoto')}</button>
       <button class="tbtn" data-act="edit" data-n="${p.n}"><svg><use href="#pen"/></svg>${t('edit')}</button>
+      <button class="tbtn tbtn-remove" data-act="remove" data-n="${p.n}"><svg><use href="#trash"/></svg>${t('removePlant')}</button>
     </div>`;
 }
 function editorHTML(p){
@@ -489,7 +497,8 @@ async function saveOverride(n){
 }
 async function resetAll(){
   if(window.storage){ try{ const r = await window.storage.list('plant:'); if(r && r.keys) for(const k of r.keys){ try{await window.storage.delete(k);}catch(e){} } }catch(e){} }
-  try{ localStorage.removeItem('extraPlants'); }catch(e){}
+  try{ localStorage.removeItem('extraPlants'); localStorage.removeItem('removedPlants'); }catch(e){}
+  removedPlants.clear();
   for(const k in overrides) delete overrides[k];
   for(const k in ui.photoIdx) delete ui.photoIdx[k];
   PLANTS = PLANTS.filter(p => p.n <= origPlantCount);
@@ -517,6 +526,13 @@ grid.addEventListener('click', e=>{
   }
   else if(act==='photo'){ pendingN = n; fileInput.click(); }
   else if(act==='edit'){ ui.editing = n; render(); }
+  else if(act==='remove'){
+    if(!confirm(t('confirmRemove'))) return;
+    PLANTS = PLANTS.filter(p=>p.n!==n);
+    delete BASE[n]; delete overrides[n]; delete ui.photoIdx[n];
+    if(n <= origPlantCount){ removedPlants.add(n); try{localStorage.setItem('removedPlants',JSON.stringify([...removedPlants]));}catch(e){} }
+    ui.editing = null; render();
+  }
   else if(act==='cancel'){
     if(overrides[n] && overrides[n]._new){
       PLANTS = PLANTS.filter(p=>p.n!==n);
@@ -769,6 +785,7 @@ const diagBanner = document.getElementById('diagBanner');
 (async function(){
   try {
     PLANTS = await (await fetch('plants.json', {cache:'no-store'})).json();
+    PLANTS = PLANTS.filter(p => !removedPlants.has(p.n));
     origPlantCount = PLANTS.length;
     const extra = loadLocalPlants();
     for(const p of extra) PLANTS.push(p);
